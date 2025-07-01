@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "rag-exercise"
+version = "0.1.0"
+description = "智慧百科助手（RAG + Wikipedia API + 工具整合）"
+authors = ["sssh32032@gmail.com"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = {extras = ["standard"], version = "^0.115.13"}
+openai = "^1.91.0"
+cohere = "^5.15.0"
+numpy = "^2.3.1"
+python-dotenv = "^1.0.0"
+langchain = "^0.3.26"
+langchain-openai = "^0.3.27"
+langchain-community = "^0.3.26"
+wikipedia = "^1.4.0"
+faiss-cpu = "^1.11.0"
+sentence-transformers = "^4.1.0"
+rerankers = "^0.10.0"
+guardrails-ai = "^0.6.6"
+pydantic = "^2.11.7"
+wikipedia-api = "^0.8.1"
+opencc-python-reimplemented = "^0.1.7"
+transformers = "^4.53.0"
+torch = "^2.7.1"
+bitsandbytes = "^0.46.0"
+accelerate = "^1.8.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+pytest-cov = "^6.2.1"
+pytest-mock = "^3.14.1"
+flake8 = "^7.3.0"
+bandit = "^1.8.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api" 
