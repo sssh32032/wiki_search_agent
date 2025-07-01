@@ -316,7 +316,7 @@ class EmbeddingProcessor:
     
     def search_similar(self, query: str, k: int = 5) -> List[Dict]:
         """
-        Search for similar texts
+        Search for similar texts across all available indices
         
         Args:
             query: Query text
@@ -325,42 +325,61 @@ class EmbeddingProcessor:
         Returns:
             List of similar texts with text content and similarity scores
         """
-        # Load latest index and metadata
+        # Load all index files
         index_files = list(self.index_dir.glob("faiss_index_*.index"))
         if not index_files:
-            raise FileNotFoundError("FAISS index file not found")
-        
-        # Use latest index
-        latest_index = max(index_files, key=lambda x: x.stat().st_mtime)
-        metadata_file = latest_index.with_name(f"metadata_{latest_index.stem.split('_')[-1]}.json")
-        
-        # Load index
-        index = faiss.read_index(str(latest_index))
-        
-        # Load metadata
-        with open(metadata_file, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
+            raise FileNotFoundError("No FAISS index files found")
         
         # Create vector for query
         query_embedding = self.model.encode([query])
         faiss.normalize_L2(query_embedding)
         
-        # Search for similar vectors
-        scores, indices = index.search(query_embedding.astype('float32'), k)
+        # Search across all indices
+        all_results = []
         
-        # Return results
-        results = []
-        for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
-            if idx < len(metadata):
-                result = {
-                    'rank': i + 1,
-                    'score': float(score),
-                    'metadata': metadata[idx],
-                    'text': metadata[idx]['text']  # Return text content directly
-                }
-                results.append(result)
+        for index_file in index_files:
+            # Get corresponding metadata file
+            timestamp = index_file.stem.split('_')[-1]
+            metadata_file = index_file.with_name(f"metadata_{timestamp}.json")
+            
+            if not metadata_file.exists():
+                logger.warning(f"Metadata file not found for {index_file.name}, skipping...")
+                continue
+            
+            # Load index
+            index = faiss.read_index(str(index_file))
+            
+            # Load metadata
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            
+            # Search in this index
+            scores, indices = index.search(query_embedding.astype('float32'), k)
+            
+            # Add results with index source information
+            for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
+                if idx < len(metadata):
+                    result = {
+                        'rank': i + 1,
+                        'score': float(score),
+                        'metadata': metadata[idx],
+                        'text': metadata[idx]['text'],
+                        'index_source': index_file.name,  # Track which index this result came from
+                        'timestamp': timestamp
+                    }
+                    all_results.append(result)
         
-        return results
+        # Sort all results by score (descending) and take top k
+        all_results.sort(key=lambda x: x['score'], reverse=True)
+        top_results = all_results[:k]
+        
+        # Re-rank the top results
+        for i, result in enumerate(top_results):
+            result['rank'] = i + 1
+        
+        logger.info(f"Searched across {len(index_files)} indices, found {len(all_results)} total results, returning top {len(top_results)}")
+        
+        return top_results
 
 
 def main():
