@@ -205,6 +205,9 @@ class WikipediaFetcher:
         logger.info(f"Data saved to: {output_file}")
         logger.info(f"Successful: {results['successful']}, Failed: {results['failed']}")
         
+        # Add the saved file path to results
+        results['saved_file'] = str(output_file)
+        
         return results
     
     def fetch_by_category(self, category: str, limit: int = 10) -> Dict:
