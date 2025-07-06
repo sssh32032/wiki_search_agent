@@ -346,7 +346,7 @@ User input: {state['input']}
             state["history"].append("llm2_relevance_check")
             return state
         prompt = f"""
-You are an assistant that checks if the provided context sufficiently answers all aspects of the question.
+You are an assistant that checks if the provided context sufficiently answers all aspects of the question without missing information.
 Respond with 'sufficient' or 'insufficient'.
 Context: {state['retrieved']}
 Question: {state['input']}
