@@ -9,12 +9,10 @@ package-mode = false
 [tool.poetry.dependencies]
 python = "^3.12"
 fastapi = {extras = ["standard"], version = "^0.115.13"}
-openai = "^1.91.0"
 cohere = "^5.15.0"
 numpy = "^2.3.1"
 python-dotenv = "^1.0.0"
 langchain = "^0.3.26"
-langchain-openai = "^0.3.27"
 langchain-community = "^0.3.26"
 wikipedia = "^1.4.0"
 faiss-cpu = "^1.11.0"
@@ -32,6 +30,7 @@ langgraph = "^0.5.1"
 langchain-text-splitters = "^0.3.8"
 langchain-cohere = "^0.4.4"
 langchain-huggingface = "^0.3.0"
+openai = "^1.93.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

@@ -14,11 +14,8 @@ from pydantic import BaseModel, Field
 class Settings(BaseModel):
     """Application settings class"""
     # API key settings
-    openai_api_key: str = Field(default_factory=lambda: os.environ.get("OPENAI_API_KEY", ""))
     cohere_api_key: str = Field(default_factory=lambda: os.environ.get("COHERE_API_KEY", ""))
-    # Model settings
-    openai_model: str = Field(default_factory=lambda: os.environ.get("OPENAI_MODEL", "gpt-4o-mini"))
-    embedding_model: str = Field(default_factory=lambda: os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small"))
+
     # Vector database settings
     vector_db_path: str = Field(default_factory=lambda: os.environ.get("VECTOR_DB_PATH", "./faiss_index"))
     chunk_size: int = Field(default_factory=lambda: int(os.environ.get("CHUNK_SIZE", 1000)))
@@ -47,7 +44,7 @@ def get_settings() -> Settings:
 
 def validate_api_keys() -> bool:
     """Validate if API keys are set"""
-    required_keys = ["openai_api_key", "cohere_api_key"]
+    required_keys = ["cohere_api_key"]
     for key in required_keys:
         if not getattr(settings, key):
             print(f"Warning: {key} not set")
