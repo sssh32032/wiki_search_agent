@@ -174,7 +174,7 @@ class WikipediaRAGChain:
         graph.add_edge("retrieve", "llm2_relevance_check")
         graph.add_edge("search_and_retrieve", "llm2_relevance_check")
         def relevance_edge(state):
-            if state["output"] == "relevant":
+            if state["output"] == "sufficient":
                 return "llm3_answer"
             last = state["history"][-2] if len(state["history"]) >= 2 else ""
             if last == "check_memory":
@@ -250,30 +250,33 @@ class WikipediaRAGChain:
             state["searched_queries"] = []
         # Use LLM to generate a new topic for wiki search
         topic_prompt = f"""
-Given the following user question, rephrase the question to be the most appropriate and non-duplicate Wikipedia search question. Only return the question string, do not include any explanation or formatting.
+You are an assistant to provide Wikipedia search queries to retrieve sufficient information for the user's question.
+The previously searched queries cannot retrieve sufficient information for the user's question.
+So, given the following user question and previously searched queries, provide an informative and non-duplicate query to retrieve the missing information for a comprehensive answer.
+Only return the query string, do not include any explanation or formatting.
 User question: {state['input']}
-Previously searched questions: {state['searched_queries']}
+Previously searched queries: {state['searched_queries']}
 """
         response = self.cohere_client.chat(message=topic_prompt)
-        topic = response.text.strip().strip('"')
-        logger.info(f"[Node] search_and_retrieve_node LLM suggested topic: {topic}")
+        query = response.text.strip().strip('"')
+        logger.info(f"[Node] search_and_retrieve_node LLM suggested query: {query}")
         # Avoid duplicate search
-        if topic in state["searched_queries"]:
-            logger.info(f"[Node] search_and_retrieve_node: topic '{topic}' already searched, skipping.")
+        if query in state["searched_queries"]:
+            logger.info(f"[Node] search_and_retrieve_node: query '{query}' already searched, skipping.")
             state["retrieved"] = ""
-            state["output"] = "No new topic to search."
+            state["output"] = "No new query to search."
             state["history"].append("search_and_retrieve")
             state["search_and_retrieve_count"] += 1
             return state
-        # Add topic to searched_queries
-        state["searched_queries"].append(topic)
+        # Add query to searched_queries
+        state["searched_queries"].append(query)
         # --- WikipediaFetcher fetch and update logic ---
         from scripts.fetch_wiki import WikipediaFetcher
         import os
         from pathlib import Path
         
         fetcher = WikipediaFetcher()
-        search_results = fetcher.search_and_fetch_pages(topic, limit=settings.wiki_max_pages)
+        search_results = fetcher.search_and_fetch_pages(query, limit=settings.wiki_max_pages)
         new_texts = []
         for page in search_results.get('pages', []):
             chunks = self.text_splitter.split_text(page['content'])
@@ -309,6 +312,7 @@ Previously searched questions: {state['searched_queries']}
     def llm1_decision_node(self, state: GraphState) -> GraphState:
         """LLM1 node: uses Cohere LLM to translate and decide next action, returns JSON."""
         prompt = f"""
+You are an assistant to handle user input for a Wikipedia RAG system.
 If the user input is not in English, translate it to English and use that as the new input.
 Then, based on the new input, decide which action to take next.
 You can choose one of: 'check_memory', 'retrieve', or 'search_and_retrieve'.
@@ -338,12 +342,12 @@ User input: {state['input']}
     def llm2_relevance_check_node(self, state: GraphState) -> GraphState:
         log_state_summary(state, "llm2_relevance_check")
         if not state["retrieved"].strip():
-            state["output"] = "irrelevant"
+            state["output"] = "insufficient"
             state["history"].append("llm2_relevance_check")
             return state
         prompt = f"""
-You are an assistant that checks if the provided context sufficiently answers or is mostly related to the question.
-Respond with 'relevant' or 'irrelevant'.
+You are an assistant that checks if the provided context sufficiently answers all aspects of the question.
+Respond with 'sufficient' or 'insufficient'.
 Context: {state['retrieved']}
 Question: {state['input']}
 """
@@ -375,13 +379,13 @@ Question: {state['input']}
         logger.info(f"[Node] llm3_answer Cohere response: {response.text}")
         state["output"] = response.text.strip()
         
-        # Only save to memory if the retrieved content was relevant
-        if relevance_result == "relevant":
+        # Only save to memory if the retrieved content was sufficient
+        if relevance_result == "sufficient":
             self.memory.save_context({"query": state["input"]}, {"answer": state["output"]})
             self.memory_db.save_local(str(self.memory_db_path))
-            logger.info(f"[Node] llm3_answer: Saved relevant Q&A to memory_db")
+            logger.info(f"[Node] llm3_answer: Saved completed Q&A to memory_db")
         else:
-            logger.info(f"[Node] llm3_answer: Skipped saving to memory_db (content was irrelevant)")
+            logger.info(f"[Node] llm3_answer: Skipped saving to memory_db (content was insufficient)")
         state["history"].append("llm3_answer")
         return state
 
