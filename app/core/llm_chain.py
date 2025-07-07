@@ -1,15 +1,21 @@
 """
 LLM Chain module using LangGraph for modular RAG workflow
-Refactored: Modular, English comments, prompt design from llm_chain_for_ref.py
 """
 
 import os
+# Disable OpenTelemetry to prevent connection errors
+os.environ["OTEL_SDK_DISABLED"] = "true"
+
 import json
 import logging
 from typing import TypedDict, List, Dict, Any
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 import re
+
+# Guardrails imports
+from guardrails import Guard
+from guardrails.hub import DetectJailbreak, ToxicLanguage
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -55,6 +61,10 @@ class GraphState(TypedDict):
     - history: list of node names traversed
     - initial_node_choice: str, one of 'check_memory', 'retrieve', 'search_and_retrieve' (set by LLM1_decision)
     - search_and_retrieve_count: int, how many times search_and_retrieve has been called
+    - input_validated: bool, whether the input has passed validation
+    - output_validated: bool, whether the output has passed validation
+    - llm3_retry: int, how many times the LLM3 answer has been retried
+    - final_relevance_result: str, the result of the relevance check
     """
     input: str
     retrieved: str
@@ -63,6 +73,10 @@ class GraphState(TypedDict):
     initial_node_choice: str
     search_and_retrieve_count: int
     searched_queries: list[str]
+    input_validated: bool
+    output_validated: bool
+    llm3_retry: int
+    final_relevance_result: str
 
 def log_state_summary(state: GraphState, node_name: str):
     """Log a summary of state with only key information"""
@@ -70,7 +84,10 @@ def log_state_summary(state: GraphState, node_name: str):
         "input": state.get("input", ""),
         "output": state.get("output", ""),
         "search_and_retrieve_count": state.get("search_and_retrieve_count", 0),
-        "searched_queries": state.get("searched_queries", [])
+        "searched_queries": state.get("searched_queries", []),
+        "input_validated": state.get("input_validated", False),
+        "output_validated": state.get("output_validated", False),
+        "llm3_retry": state.get("llm3_retry", 0)
     }
     logger.info(f"[Node] {node_name} state summary: {summary}")
 
@@ -82,10 +99,10 @@ class WikipediaRAGChain:
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
-        # Text splitter with config
+        # Text splitter with config - using smaller chunk size for token limit
         self.text_splitter = SentenceTransformersTokenTextSplitter(
-            tokens_per_chunk=settings.chunk_size,
-            chunk_overlap=settings.chunk_overlap,
+            tokens_per_chunk=min(settings.chunk_size, 256),  # Respect model token limit
+            chunk_overlap=min(settings.chunk_overlap, 50),   # Respect model token limit
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
@@ -157,22 +174,28 @@ class WikipediaRAGChain:
         return memory_db, memory_db_path
 
     def _setup_graph(self):
-        logger.info('Setting up RAG graph')
+        logger.info('Setting up RAG graph with Guardrails')
         graph = StateGraph(GraphState)
+        graph.add_node("input_validation", self.input_validation_node)
         graph.add_node("llm1_decision", self.llm1_decision_node)
         graph.add_node("check_memory", self.check_memory_node)
         graph.add_node("retrieve", self.retrieve_node)
         graph.add_node("search_and_retrieve", self.search_and_retrieve_node)
         graph.add_node("llm2_relevance_check", self.llm2_relevance_check_node)
         graph.add_node("llm3_answer", self.llm3_answer_node)
-        graph.set_entry_point("llm1_decision")
-        def entry_edge(state):
+        graph.add_node("output_validation_node", self.output_validation_node)
+        graph.set_entry_point("input_validation")
+
+        def input_validation_edge(state):
+            if state.get("input_validated", False):
+                return "llm1_decision"
+            else:
+                return END
+
+        def llm1_decision_edge(state):
             return state["initial_node_choice"]
-        graph.add_conditional_edges("llm1_decision", entry_edge)
-        graph.add_edge("check_memory", "llm2_relevance_check")
-        graph.add_edge("retrieve", "llm2_relevance_check")
-        graph.add_edge("search_and_retrieve", "llm2_relevance_check")
-        def relevance_edge(state):
+
+        def llm2_relevance_check_edge(state):
             if state["output"] == "sufficient":
                 return "llm3_answer"
             last = state["history"][-2] if len(state["history"]) >= 2 else ""
@@ -186,9 +209,25 @@ class WikipediaRAGChain:
                 else:
                     return "llm3_answer"
             return "llm3_answer"
-        graph.add_conditional_edges("llm2_relevance_check", relevance_edge)
-        graph.add_edge("llm3_answer", END)
-        
+
+        def output_validation_edge(state):
+            if state.get("output_validated", False):
+                return END
+            else:
+                if state.get("llm3_retry", 0) < 3:
+                    return "llm3_answer"
+                else:
+                    state["output"] = "Sorry, the system could not generate a safe response. Please try again later."
+                    return END
+
+        graph.add_conditional_edges("input_validation", input_validation_edge)
+        graph.add_conditional_edges("llm1_decision", llm1_decision_edge)
+        graph.add_edge("check_memory", "llm2_relevance_check")
+        graph.add_edge("retrieve", "llm2_relevance_check")
+        graph.add_edge("search_and_retrieve", "llm2_relevance_check")
+        graph.add_conditional_edges("llm2_relevance_check", llm2_relevance_check_edge)
+        graph.add_edge("llm3_answer", "output_validation_node")
+        graph.add_conditional_edges("output_validation_node", output_validation_edge)
         return graph
 
     # Node: Check memory for existing answer
@@ -206,7 +245,7 @@ class WikipediaRAGChain:
         log_state_summary(state, "retrieve")
         
         # Get initial documents
-        docs = self.retriever.get_relevant_documents(state["input"])
+        docs = self.retriever.invoke(state["input"])
         if not docs:
             state["retrieved"] = ""
             state["history"].append("retrieve")
@@ -296,7 +335,7 @@ Previously searched queries: {state['searched_queries']}
         except Exception as e:
             logger.warning(f"Auto-cleanup failed: {e}")
         # Retrieve again after update
-        docs = self.retriever.get_relevant_documents(state["input"])
+        docs = self.retriever.invoke(state["input"])
         passages = [doc.page_content for doc in docs]
         if passages:
             state["retrieved"] = "\n".join(passages)
@@ -309,7 +348,8 @@ Previously searched queries: {state['searched_queries']}
     
     # Node: LLM1 Decision
     def llm1_decision_node(self, state: GraphState) -> GraphState:
-        """LLM1 node: uses Cohere LLM to translate and decide next action, returns JSON."""
+        """LLM1 node: uses Cohere LLM to translate and decide next action."""
+        log_state_summary(state, "llm1_decision")
         prompt = f"""
 You are an assistant to handle user input for a Wikipedia RAG system.
 If the user input is not in English, translate it to English and use that as the new input.
@@ -322,23 +362,25 @@ Return only a valid JSON object with two keys: 'translated_input' (the translate
 Do NOT include any explanation or markdown code block.
 User input: {state['input']}
 """
-        response = self.cohere_client.chat(message=prompt)
-        logger.info(f"[Node] llm1_decision_node raw response: {response.text}")
-        import json
         try:
-            import re
-            match = re.search(r'\{.*\}', response.text, re.DOTALL)
-            json_str = match.group(0) if match else response.text
-            result = json.loads(json_str)
+            response = self.cohere_client.chat(message=prompt)
+            # Try to parse JSON output from LLM
+            import json
+            result = json.loads(response.text)
             state["input"] = result.get("translated_input", state["input"])
-            state["initial_node_choice"] = result.get("initial_node_choice", state.get("initial_node_choice", "retrieve"))
+            state["initial_node_choice"] = result.get("initial_node_choice", "check_memory")
+            logger.info(f"[Node] llm1_decision: Parsed result - {result}")
         except Exception as e:
-            logger.error(f"[Node] llm1_decision_node JSON parse error: {e}, response: {response.text}")
+            logger.warning(f"[Node] llm1_decision: JSON parsing failed - {e}")
+            state["input"] = state["input"]
+            state["initial_node_choice"] = "check_memory"
+        
         state["history"].append("llm1_decision")
         return state
     
     # Node: LLM2 Relevance Check
     def llm2_relevance_check_node(self, state: GraphState) -> GraphState:
+        """LLM2 node: checks if the retrieved content is sufficient to answer the question."""
         log_state_summary(state, "llm2_relevance_check")
         if not state["retrieved"].strip():
             state["output"] = "insufficient"
@@ -346,27 +388,43 @@ User input: {state['input']}
             return state
         prompt = f"""
 You are an assistant that checks if the provided context sufficiently answers all aspects of the question without missing information.
-Respond with 'sufficient' or 'insufficient'.
+Respond with only one of the following: 'sufficient' or 'insufficient'.
+Do NOT include any explanation or markdown code block.
 Context: {state['retrieved']}
 Question: {state['input']}
 """
-        response = self.cohere_client.chat(message=prompt)
-        logger.info(f"[Node] llm2_relevance_check Cohere response: {response.text}")
-        state["output"] = response.text.lower().strip()
+        try:
+            response = self.cohere_client.chat(message=prompt)
+            response_text = response.text.strip().lower()
+            # explicitly check for both keywords
+            if "insufficient" in response_text:
+                state["output"] = "insufficient"
+            elif "sufficient" in response_text:
+                state["output"] = "sufficient"
+            else:
+                # Default to insufficient if neither keyword is found
+                state["output"] = "insufficient"
+            logger.info(f"[Node] llm2_relevance_check: Response '{response_text}'")
+        except Exception as e:
+            logger.warning(f"[Node] llm2_relevance_check: API call failed - {e}")
+            state["output"] = "insufficient"
+        
         state["history"].append("llm2_relevance_check")
         return state
 
     # Node: LLM3 Answer
     def llm3_answer_node(self, state: GraphState) -> GraphState:
+        """Node: Generate the final answer using Cohere LLM. Only set final_relevance_result if it is empty."""
         log_state_summary(state, "llm3_answer")
         if not state["retrieved"].strip():
             state["output"] = "No relevant information found."
+            if not state.get("final_relevance_result"):
+                state["final_relevance_result"] = "insufficient"
             state["history"].append("llm3_answer")
             return state
-        
-        # Save the relevance check result before generating answer
-        relevance_result = state.get("output", "")
-        
+        # Only set final_relevance_result if it is empty
+        if not state.get("final_relevance_result"):
+            state["final_relevance_result"] = state["output"]
         prompt = f"""
 You are an assistant. You must answer the question strictly based on the provided context.
 If the context does not contain the answer, reply with 'No relevant information found.'
@@ -377,15 +435,48 @@ Question: {state['input']}
         response = self.cohere_client.chat(message=prompt)
         logger.info(f"[Node] llm3_answer Cohere response: {response.text}")
         state["output"] = response.text.strip()
-        
-        # Only save to memory if the retrieved content was sufficient
-        if relevance_result == "sufficient":
-            self.memory.save_context({"query": state["input"]}, {"answer": state["output"]})
-            self.memory_db.save_local(str(self.memory_db_path))
-            logger.info(f"[Node] llm3_answer: Saved completed Q&A to memory_db")
-        else:
-            logger.info(f"[Node] llm3_answer: Skipped saving to memory_db (content was insufficient)")
         state["history"].append("llm3_answer")
+        return state
+
+    def input_validation_node(self, state: GraphState) -> GraphState:
+        """Node: Validate user input for jailbreak attempts using Guardrails."""
+        log_state_summary(state, "input_validation")
+        guard = Guard().use(DetectJailbreak, threshold=0.7, on_fail="exception")
+        try:
+            guard.validate(state["input"])
+            state["input_validated"] = True
+            state["history"].append("input_validation")
+            logger.info("[Node] input_validation: Input passed jailbreak detection")
+        except Exception as e:
+            state["input_validated"] = False
+            state["output"] = "Your input was flagged as unsafe. Please rephrase your question."
+            state["history"].append("input_validation_failed")
+            logger.warning(f"[Node] input_validation: Jailbreak detected - {e}")
+            logger.info(f"[Node] input_validation output: {state['output']}")
+        return state
+
+    def output_validation_node(self, state: GraphState) -> GraphState:
+        """Node: Validate output content for toxic language using Guardrails. Save to memory if valid and relevant."""
+        log_state_summary(state, "output_validation")
+        guard = Guard().use(ToxicLanguage, threshold=0.5, validation_method="sentence", on_fail="exception")
+        try:
+            guard.validate(state["output"])
+            state["output_validated"] = True
+            state["history"].append("output_validation")
+            logger.info("[Node] output_validation: Output passed toxic language detection")
+            # Save to memory only if relevance is sufficient
+            if state.get("final_relevance_result", "") == "sufficient":
+                self.memory.save_context({"query": state["input"]}, {"answer": state["output"]})
+                self.memory_db.save_local(str(self.memory_db_path))
+                logger.info(f"[Node] output_validation: Saved completed Q&A to memory_db")
+            else:
+                logger.info(f"[Node] output_validation: Skipped saving to memory_db (content was insufficient)")
+        except Exception as e:
+            state["output_validated"] = False
+            state["llm3_retry"] = state.get("llm3_retry", 0) + 1
+            state["output"] = f"Output validation failed: {e}"
+            state["history"].append("output_validation_failed")
+            logger.warning(f"[Node] output_validation: Toxic language detected - {e}")
         return state
 
     def generate(self, query: str) -> str:
@@ -397,7 +488,11 @@ Question: {state['input']}
             "history": [],
             "initial_node_choice": "",
             "search_and_retrieve_count": 0,
-            "searched_queries": []
+            "searched_queries": [],
+            "input_validated": False,
+            "output_validated": False,
+            "llm3_retry": 0,
+            "final_relevance_result": ""
         })
         result = self.app.invoke(state)
         return result["output"]
