@@ -38,6 +38,7 @@ pytest-cov = "^6.2.1"
 pytest-mock = "^3.14.1"
 flake8 = "^7.3.0"
 bandit = "^1.8.5"
+pytest-asyncio = "^1.0.0"
 
 [build-system]
 requires = ["poetry-core"]
