@@ -18,16 +18,33 @@ api_stats = {
 }
 
 class QueryRequest(BaseModel):
-    query: str
+    query: str = "What is the capital of Taiwan?"
+    class Config:
+        schema_extra = {
+            "example": {"query": "Who is the current president of Taiwan?"}
+        }
 
 class BatchQueryRequest(BaseModel):
-    queries: List[str]
+    queries: List[str] = ["What is the capital of Taiwan?", "Who are the presidents of Taiwan?"]
+    class Config:
+        schema_extra = {
+            "example": {"queries": ["What is the capital of Taiwan?", "Who are the presidents of Taiwan?"]}
+        }
 
 class QueryResponse(BaseModel):
     input: str
     output: str
     processing_time: float
     timestamp: datetime
+    class Config:
+        schema_extra = {
+            "example": {
+                "input": "Who is the current president of Taiwan?",
+                "output": "The current president of Taiwan is Lai Ching-te (as of 2024).",
+                "processing_time": 0.42,
+                "timestamp": "2024-07-08T12:34:56.789Z"
+            }
+        }
 
 class BatchQueryResponse(BaseModel):
     results: List[Dict[str, Any]]
@@ -36,10 +53,55 @@ class BatchQueryResponse(BaseModel):
     failed_queries: int
     processing_time: float
     timestamp: datetime
+    class Config:
+        schema_extra = {
+            "example": {
+                "results": [
+                    {
+                        "query": "What is the capital of Taiwan?",
+                        "success": True,
+                        "input": "What is the capital of Taiwan?",
+                        "output": "The capital of Taiwan is Taipei.",
+                        "processing_time": 0.35,
+                        "timestamp": "2024-07-08T12:34:56.789Z"
+                    },
+                    {
+                        "query": "Who are the presidents of Taiwan?",
+                        "success": True,
+                        "input": "Who are the presidents of Taiwan?",
+                        "output": "The presidents of Taiwan include Chiang Kai-shek, Lee Teng-hui, ...",
+                        "processing_time": 0.51,
+                        "timestamp": "2024-07-08T12:34:57.123Z"
+                    }
+                ],
+                "total_queries": 2,
+                "successful_queries": 2,
+                "failed_queries": 0,
+                "processing_time": 0.86,
+                "timestamp": "2024-07-08T12:34:57.123Z"
+            }
+        }
 
-@router.post("/query", response_model=QueryResponse)
+@router.post(
+    "/query",
+    response_model=QueryResponse,
+    summary="Single RAG Query",
+    description="Submit a single question to the RAG system and receive an answer generated from Wikipedia-based retrieval and LLM.",
+    responses={
+        200: {"description": "Successful response with answer."},
+        400: {"description": "Invalid request."},
+        500: {"description": "Internal server error."}
+    },
+)
 async def query_rag(request: QueryRequest):
-    """Main RAG query endpoint"""
+    """
+    Main RAG query endpoint.
+    
+    Args:
+        request (QueryRequest): The query request containing a single question.
+    Returns:
+        QueryResponse: The answer and metadata.
+    """
     api_stats["total_queries"] += 1
     api_stats["last_query_time"] = datetime.now()
     
@@ -62,9 +124,26 @@ async def query_rag(request: QueryRequest):
         api_stats["failed_queries"] += 1
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/batch-query", response_model=BatchQueryResponse)
+@router.post(
+    "/batch-query",
+    response_model=BatchQueryResponse,
+    summary="Batch RAG Query",
+    description="Submit multiple questions in a single request. Each question will be processed in parallel and results returned as a list.",
+    responses={
+        200: {"description": "Successful response with batch results."},
+        400: {"description": "Invalid request."},
+        500: {"description": "Internal server error."}
+    },
+)
 async def batch_query_rag(request: BatchQueryRequest):
-    """Batch query endpoint for processing multiple queries"""
+    """
+    Batch query endpoint for processing multiple questions.
+    
+    Args:
+        request (BatchQueryRequest): The batch query request containing a list of questions.
+    Returns:
+        BatchQueryResponse: The list of answers and metadata for each question.
+    """
     start_time = time.time()
     
     try:
@@ -89,9 +168,20 @@ async def batch_query_rag(request: BatchQueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
 
-@router.get("/status")
+@router.get(
+    "/status",
+    summary="System Status and Statistics",
+    description="Get current system status, API statistics, and configuration.",
+    responses={
+        200: {"description": "System status and statistics."},
+        500: {"description": "Internal server error."}
+    },
+)
 def system_status():
-    """System status and statistics"""
+    """
+    System status and statistics endpoint.
+    Returns system info, API usage statistics, and configuration.
+    """
     settings = get_settings()
     uptime = datetime.now() - api_stats["start_time"]
     
@@ -118,9 +208,20 @@ def system_status():
         }
     }
 
-@router.get("/config")
+@router.get(
+    "/config",
+    summary="Get Current Configuration",
+    description="Get current system configuration (excluding sensitive data).",
+    responses={
+        200: {"description": "Current configuration."},
+        500: {"description": "Internal server error."}
+    },
+)
 def get_configuration():
-    """Get current configuration (without sensitive data)"""
+    """
+    Get current configuration (without sensitive data).
+    Returns retrieval, Wikipedia, and storage settings.
+    """
     settings = get_settings()
     return {
         "retrieval_settings": {
@@ -139,9 +240,20 @@ def get_configuration():
         }
     }
 
-@router.post("/reset-stats")
+@router.post(
+    "/reset-stats",
+    summary="Reset API Statistics",
+    description="Reset all API usage statistics to zero.",
+    responses={
+        200: {"description": "Statistics reset successfully."},
+        500: {"description": "Internal server error."}
+    },
+)
 def reset_statistics():
-    """Reset API statistics"""
+    """
+    Reset API statistics endpoint.
+    Resets all API usage counters and timestamps.
+    """
     global api_stats
     api_stats = {
         "total_queries": 0,

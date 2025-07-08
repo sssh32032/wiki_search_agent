@@ -68,7 +68,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.get("/")
 def root():
-    """Root endpoint with API information"""
+    """
+    Root endpoint providing API information and available endpoints.
+    
+    Returns:
+        dict: Basic API info, version, and key endpoints.
+    """
     return {
         "message": f"Welcome to {settings.app_name}",
         "version": settings.app_version,
@@ -77,9 +82,14 @@ def root():
         "status": "/status"
     }
 
-@app.get("/health")
+@app.get("/health", summary="Health Check", description="Check if the API service is running and healthy.")
 def health_check():
-    """Health check endpoint"""
+    """
+    Health check endpoint.
+    
+    Returns:
+        dict: Status and current timestamp.
+    """
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 app.include_router(router, prefix="/api") 
