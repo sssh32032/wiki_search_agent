@@ -291,29 +291,6 @@ html5lib = ["html5lib"]
 lxml = ["lxml"]
 
 [[package]]
-name = "bitsandbytes"
-version = "0.46.0"
-description = "k-bit optimizers and matrix multiplication routines."
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "bitsandbytes-0.46.0-py3-none-manylinux_2_24_aarch64.whl", hash = "sha256:010709b56c85b0355f47fefbb37fe9058e8b18b9bf275bd576c5bd95a0d14d0c"},
-    {file = "bitsandbytes-0.46.0-py3-none-manylinux_2_24_x86_64.whl", hash = "sha256:ef38883cfd26f36a0dfff1715f620f87cee3813431f33e10e9658205160cb89b"},
-    {file = "bitsandbytes-0.46.0-py3-none-win_amd64.whl", hash = "sha256:121820a6df80ae3b7e361f7ef193279c3204c361a7e21eb43b5ffa7293403979"},
-]
-
-[package.dependencies]
-numpy = ">=1.17"
-torch = ">=2.2,<3"
-
-[package.extras]
-benchmark = ["matplotlib", "pandas"]
-dev = ["bitsandbytes[test]", "build (>=1.0.0,<2)", "pre-commit (>=3.5.0,<4)", "ruff (==0.11.2)", "wheel (>=0.42,<1)"]
-docs = ["hf-doc-builder (==0.5.0)"]
-test = ["einops (>=0.8.0,<0.9.0)", "lion-pytorch (==0.2.3)", "pytest (>=8.3,<9.0)", "scipy (>=1.11.4,<2) ; python_version >= \"3.9\"", "transformers (>=4.30.1,<5)"]
-
-[[package]]
 name = "certifi"
 version = "2025.6.15"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -1825,25 +1802,6 @@ together = ["langchain-together"]
 xai = ["langchain-xai"]
 
 [[package]]
-name = "langchain-cohere"
-version = "0.4.4"
-description = "An integration package connecting Cohere and LangChain"
-optional = false
-python-versions = "<4.0,>=3.9"
-groups = ["main"]
-files = [
-    {file = "langchain_cohere-0.4.4-py3-none-any.whl", hash = "sha256:75572e1b165ae0c95b6830c5dd8e698890b69900eb320df75ad2ed875d879d7e"},
-    {file = "langchain_cohere-0.4.4.tar.gz", hash = "sha256:bef75deee58706aa0402bfa4233444e4dba1fcad324761e870f48bf7bdd3d26d"},
-]
-
-[package.dependencies]
-cohere = ">=5.12.0,<6.0"
-langchain-community = ">=0.3.0,<0.4.0"
-langchain-core = ">=0.3.27,<0.4.0"
-pydantic = ">=2,<3"
-types-pyyaml = ">=6.0.12.20240917,<7.0.0.0"
-
-[[package]]
 name = "langchain-community"
 version = "0.3.26"
 description = "Community contributed LangChain integrations."
@@ -2747,14 +2705,14 @@ files = [
 
 [[package]]
 name = "openai"
-version = "1.93.0"
+version = "1.93.1"
 description = "The official Python library for the openai API"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "openai-1.93.0-py3-none-any.whl", hash = "sha256:3d746fe5498f0dd72e0d9ab706f26c91c0f646bf7459e5629af8ba7c9dbdf090"},
-    {file = "openai-1.93.0.tar.gz", hash = "sha256:988f31ade95e1ff0585af11cc5a64510225e4f5cd392698c675d0a9265b8e337"},
+    {file = "openai-1.93.1-py3-none-any.whl", hash = "sha256:a2c2946c4f21346d4902311a7440381fd8a33466ee7ca688133d1cad29a9357c"},
+    {file = "openai-1.93.1.tar.gz", hash = "sha256:11eb8932965d0f79ecc4cb38a60a0c4cef4bcd5fcf08b99fc9a399fa5f1e50ab"},
 ]
 
 [package.dependencies]
@@ -4886,18 +4844,6 @@ files = [
 ]
 
 [[package]]
-name = "types-pyyaml"
-version = "6.0.12.20250516"
-description = "Typing stubs for PyYAML"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "types_pyyaml-6.0.12.20250516-py3-none-any.whl", hash = "sha256:8478208feaeb53a34cb5d970c56a7cd76b72659442e733e268a94dc72b2d0530"},
-    {file = "types_pyyaml-6.0.12.20250516.tar.gz", hash = "sha256:9f21a70216fc0fa1b216a8176db5f9e0af6eb35d2f2932acb87689d03a5bf6ba"},
-]
-
-[[package]]
 name = "types-requests"
 version = "2.32.4.20250611"
 description = "Typing stubs for requests"
@@ -5694,4 +5640,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "f517b07fbbdc7f3e88bd9372caf322deab58bc299414ff301ddbef4089b25b41"
+content-hash = "77adbceb344f87e1ef338dd94f95ec9892779c1a1f3bb7b9f77c45e67c40eb97"
