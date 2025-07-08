@@ -10,6 +10,7 @@ htmlcov/
 data/
 faiss_index/
 logs/
+docs/
 .env
 .env.*
 *.md
