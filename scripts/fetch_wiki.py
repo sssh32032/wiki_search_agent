@@ -29,7 +29,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('logs/wiki_fetch.log'),
+        logging.FileHandler('logs/wiki_fetch.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
