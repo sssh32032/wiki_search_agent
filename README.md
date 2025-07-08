@@ -1,298 +1,311 @@
-# Wikipedia Assistant - 智慧百科助手
+# Wikipedia Assistant (RAG-based Knowledge API)
 
-基於 RAG (Retrieval-Augmented Generation) 技術的智慧百科助手，整合 Wikipedia API、向量資料庫和大型語言模型，提供準確、即時的知識問答服務。
+## 🚀 Quick Environment Setup (Windows)
 
-## 🚀 快速進入專案環境
-
-**⚠️ 重要：必須使用 cmd（命令提示字元），不要使用 PowerShell！**
+**Important: Use `cmd` (Command Prompt), NOT PowerShell!**
 
 ```cmd
-# 1. 開啟 cmd 並切換到專案目錄
+# 1. Open cmd and navigate to the project directory
 cd C:\Users\sssh3\Desktop\side_project\agent_exercise\wiki_search
 
-# 2. 檢查虛擬環境
-ls "C:\Users\sssh3\AppData\Local\pypoetry\Cache\virtualenvs"
+# 2. List available Poetry virtual environments
+"dir C:\Users\sssh3\AppData\Local\pypoetry\Cache\virtualenvs"
 
-# 3. 啟動虛擬環境（選擇最新的）
+# 3. Activate the latest virtual environment
 C:\Users\sssh3\AppData\Local\pypoetry\Cache\virtualenvs\rag-exercise-kCDYDLwJ-py3.12\Scripts\activate.bat
 
-# 4. 驗證環境
-python -c "from app.config import settings; print('✅ 配置載入成功')"
+# 4. Verify environment
+python -c "from app.config import settings; print('✅ Settings loaded')"
 ```
 
-**成功標誌**：命令提示字元前面出現 `(rag-exercise-py3.12)` 前綴
+**Success indicator:** The prompt should show `(rag-exercise-py3.12)` at the start.
 
-## 🎯 專案目標
+---
 
-### 核心功能
-- **智慧問答**：基於 Wikipedia 資料的準確回答
-- **即時檢索**：快速從向量資料庫中檢索相關資訊
-- **多語言支援**：支援中文和英文查詢
-- **安全驗證**：使用 Guardrails 確保輸出品質
-- **API 服務**：提供 RESTful API 介面
+# 📖 Project Overview
 
-### 技術特色
-- **RAG 架構**：結合檢索和生成的混合架構
-- **向量檢索**：使用 FAISS 進行高效相似度搜尋
-- **重排序優化**：使用 Cohere Rerank 提升檢索準確度
-- **模組化設計**：清晰的模組分離，易於維護和擴展
+Wikipedia Assistant is an intelligent Q&A system based on Retrieval-Augmented Generation (RAG). It integrates the Wikipedia API, vector databases, and large language models to provide accurate, real-time knowledge answers via a RESTful API.
 
-## 🏗️ 技術架構
+## ✨ Features
+- **Intelligent Q&A**: Accurate answers based on Wikipedia data
+- **Real-time Retrieval**: Fast vector search for relevant information
+- **Multilingual Support**: Handles both Chinese and English queries
+- **Safety Validation**: Guardrails for jailbreak/toxicity detection
+- **RESTful API**: Easy integration for external applications
+- **Modular Design**: Clean separation of core, API, and scripts
 
-### 核心技術棧
-- **後端框架**：FastAPI
-- **語言模型**：OpenAI GPT-4o-mini
-- **向量化模型**：OpenAI text-embedding-3-small
-- **重排序模型**：Cohere Rerank
-- **向量資料庫**：FAISS
-- **資料來源**：Wikipedia API
-- **輸出驗證**：Guardrails AI
+## 🛠️ Tech Stack
+- **Backend**: FastAPI
+- **LLM**: Cohere Command
+- **Vectorization**: HuggingFace sentence-transformers
+- **Reranking**: Cohere Rerank
+- **Vector DB**: FAISS
+- **Data Source**: Wikipedia API
+- **Validation**: Guardrails AI
 
-### 系統架構
+## 🏗️ System Architecture
 ```
-Wikipedia API → 資料獲取 → 文本切片 → 向量化 → FAISS 儲存
-                                                      ↓
-用戶查詢 → 向量檢索 → 重排序 → LLM 生成 → Guardrails 驗證 → 回應
+Wikipedia API → Data Fetch → Text Chunking → Vectorization → FAISS Storage
+                                                        ↓
+User Query → Vector Retrieval → Rerank → LLM Generation → Guardrails Validation → Response
 ```
 
-## 📁 專案結構
-
+## 📁 Project Structure
 ```
 wiki_search/
-├── pyproject.toml           # Poetry 相依管理
-├── README.md                # 專案說明文件
-├── .env                     # 環境變數設定
-├── env.example              # 環境變數範例
-├── data/                    # 臨時儲存 Wikipedia 資料
-│   └── wikipedia_pages_*.json  # Wikipedia 資料檔案
-├── scripts/                 # 資料處理腳本
-│   ├── fetch_wiki.py        # Wikipedia 爬取、清理、儲存
-│   └── build_embeddings.py  # 切片、向量化並存入 Vector Database
-├── app/                     # 核心應用程式碼
-│   ├── api/                 # FastAPI 路由與服務
-│   │   ├── main.py          # 啟動應用
-│   │   └── routes.py        # 定義 /query 路由
-│   ├── core/                # 核心邏輯
-│   │   ├── retriever.py     # 檢索模組，整合 Vector Store + Reranking
-│   │   ├── llm_chain.py     # 串接 LLM 生成流程
-│   │   ├── guardrail.py     # 輸出驗證邏輯
-│   │   └── wiki_tool.py     # 自定義 Wikipedia Tool
-│   └── config.py            # 環境設定、API 金鑰
-├── faiss_index/             # 儲存向量資料庫檔案
-│   ├── faiss_index_*.index  # FAISS 向量索引檔案
-│   └── metadata_*.json      # 文本切片元資料
-├── logs/                    # 日誌檔案
-│   ├── embeddings.log       # 向量化處理日誌
-│   └── wiki_fetch.log       # Wikipedia 資料獲取日誌
-└── Dockerfile               # 容器化部署設定
+├── app/                # Main application
+│   ├── api/            # API routes
+│   ├── core/           # Core RAG logic
+│   └── config.py       # Settings & API keys
+├── scripts/            # Utility scripts
+├── tests/              # Unit & integration tests
+├── data/               # Raw data
+├── faiss_index/        # Vector DB
+├── logs/               # Log files
+├── pyproject.toml      # Poetry config
+├── docker-compose.yml  # Docker Compose config
+├── Dockerfile          # Docker build config
+├── env.example         # Environment variable template
+└── README.md           # Project documentation
 ```
 
-## 📊 開發進度
+---
 
-### ✅ 已完成
-- [x] **環境設定與基礎架構**
-  - Poetry 環境設定
-  - 依賴套件安裝（FastAPI, OpenAI, Cohere, FAISS, LangChain 等）
-  - 專案目錄結構建立
-  - 環境變數管理系統 (`app/config.py`)
-  - `.env` 檔案設定
-- [x] **Wikipedia 資料獲取模組** (`scripts/fetch_wiki.py`)
-  - 繁體中文 Wikipedia 資料爬取
-  - 自動簡體轉繁體功能
-  - 資料清理與 JSON 格式儲存
-  - 日誌記錄系統
-- [x] **向量化處理模組** (`scripts/build_embeddings.py`)
-  - 智能文本切片（以句子為單位）
-  - 使用 sentence-transformers 進行向量化
-  - FAISS 向量索引建立與儲存
-  - 元資料管理（包含原始文本內容）
-  - 相似度搜尋功能
+# 🏁 Getting Started
 
-### 🔄 進行中
-- [ ] **核心模組開發**
-  - [x] 檢索與重排序模組 (`app/core/retriever.py`) - ✅ 已完成
-  - [ ] LLM 生成模組 (`app/core/llm_chain.py`)
-  - [ ] Guardrails 安全驗證模組 (`app/core/guardrail.py`)
-
-### 📋 待開發
-- [ ] **API 整合**
-  - [ ] FastAPI 路由設計 (`app/api/routes.py`)
-  - [ ] API 端點實作 (`app/api/main.py`)
-- [ ] **測試與優化**
-  - [ ] 功能測試
-  - [ ] 效能優化
-  - [ ] 錯誤處理
-- [ ] **部署與文檔**
-  - [ ] Docker 容器化
-  - [ ] API 文檔
-  - [ ] 使用說明
-
-## 🚀 快速開始
-
-### 環境需求
+## Prerequisites
 - Python 3.12+
 - Poetry
+- FastAPI
+- Uvicorn
 
-### 安裝步驟
-1. **克隆專案**
+## Installation
+1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd RAG_exercise
+   cd wiki_search
    ```
-
-2. **安裝依賴**
+2. **Install dependencies**
    ```bash
    poetry install
    ```
-
-3. **設定環境變數**
+3. **Set up environment variables**
    ```bash
    cp env.example .env
-   # 編輯 .env 檔案，填入你的 API 金鑰
+   # Edit .env and add your API keys
    ```
+4. **Activate the Poetry virtual environment (Windows)**
+   - Open `cmd` (not PowerShell)
+   - Navigate to the project directory
+   - Activate the environment as shown above
 
-4. **進入 Poetry 虛擬環境（Windows 詳細步驟）**
-
-   **⚠️ 重要：必須使用 cmd（命令提示字元），不要使用 PowerShell！**
-
-   1. **開啟 cmd（命令提示字元）**
-      - 方法一：在「開始」選單搜尋「cmd」並開啟
-      - 方法二：在 PowerShell 中輸入 `cmd` 切換到命令提示字元
-      - 方法三：按 `Win + R`，輸入 `cmd` 後按 Enter
-
-   2. **切換到專案目錄**
-      ```cmd
-      cd C:\Users\sssh3\Desktop\side_project\agent_exercise\wiki_search
-      ```
-
-   3. **檢查可用的虛擬環境**
-      ```cmd
-      ls "C:\Users\sssh3\AppData\Local\pypoetry\Cache\virtualenvs"
-      ```
-      - 會顯示類似以下的結果：
-      ```
-      rag-exercise-kCDYDLwJ-py3.12
-      rag-exercise-wb-tVZr8-py3.12
-      ```
-      - **選擇最新的虛擬環境**（通常是時間戳較新的，檔案夾修改時間較新的）
-
-   4. **啟動 Poetry 虛擬環境**
-      ```cmd
-      C:\Users\sssh3\AppData\Local\pypoetry\Cache\virtualenvs\rag-exercise-kCDYDLwJ-py3.12\Scripts\activate.bat
-      ```
-      - **成功標誌**：命令提示字元前面會出現 `(rag-exercise-py3.12)` 或類似的前綴
-      - 例如：`(rag-exercise-py3.12) C:\Users\sssh3\Desktop\side_project\agent_exercise\wiki_search>`
-
-   5. **驗證環境是否正確**
-      ```cmd
-      python --version
-      ```
-      - 應該顯示：`Python 3.12.10`
-
-   6. **測試配置載入**
-      ```cmd
-      python -c "from app.config import settings; print('✅ 配置載入成功')"
-      ```
-      - 如果顯示 `✅ 配置載入成功`，表示環境設定完全正確
-
-   **🔧 故障排除：**
-   - 如果看到 `ModuleNotFoundError`，表示還沒進入正確的虛擬環境
-   - 如果 `activate.bat` 執行後沒有出現括號前綴，請重新執行步驟 4
-   - 如果不確定虛擬環境路徑，可用 `poetry env info --path` 查詢（但需要在 PowerShell 中執行）
-
-5. **測試基本功能**
-   ```bash
-   # 測試配置
-   python -c "from app.config import settings; print('✅ 配置載入成功')"
-   
-   # 測試 Wikipedia 資料獲取
-   python scripts/fetch_wiki.py
-   
-   # 測試向量化處理
-   python scripts/build_embeddings.py
-   ```
-
-### API 金鑰設定
-在 `.env` 檔案中設定以下 API 金鑰：
-- `OPENAI_API_KEY`：OpenAI API 金鑰
-- `COHERE_API_KEY`：Cohere API 金鑰
-
-## 🔧 開發指南
-
-### 開發順序
-1. **✅ 資料獲取**：`scripts/fetch_wiki.py` - 已完成
-2. **✅ 向量化處理**：`scripts/build_embeddings.py` - 已完成
-3. **✅ 檢索系統**：`app/core/retriever.py` - 已完成
-4. **📋 生成系統**：`app/core/llm_chain.py` - 待開發
-5. **📋 安全驗證**：`app/core/guardrail.py` - 待開發
-6. **📋 API 整合**：`app/api/` - 待開發
-
-### 測試
-```bash
-# 測試 Wikipedia 資料獲取
-python scripts/fetch_wiki.py
-
-# 測試向量化處理
-python scripts/build_embeddings.py
-
-# 測試配置
-python -c "from app.config import settings; print('✅ 配置載入成功')"
-
-# 測試檢索器模組
-python app/core/retriever.py
-
-# 測試 API（待開發）
-# uvicorn app.api.main:app --reload
+## Running the API Server
+**Recommended (background):**
+```cmd
+start uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+**Foreground (blocks terminal):**
+```cmd
+uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## 📈 未來規劃
+**Health check:**
+```cmd
+curl -X GET "http://127.0.0.1:8000/health"
+# Should return: {"status":"ok","timestamp":"..."}
+```
 
-### 短期目標 (1-2 週)
-- [x] 完成 Wikipedia 資料獲取功能
-- [x] 完成向量化處理與儲存功能
-- [ ] 完成核心 RAG 功能（檢索 + 生成）
-- [ ] 建立基本 API 端點
-- [ ] 實現 Wikipedia 資料自動更新
+---
 
-### 中期目標 (1 個月)
-- [ ] 優化檢索準確度
-- [ ] 增加多語言支援
-- [ ] 實作快取機制
-- [ ] 完善錯誤處理
+# 📚 API Usage Guide
 
-### 長期目標 (2-3 個月)
-- [ ] 支援更多資料來源
-- [ ] 實作用戶管理系統
-- [ ] 增加對話歷史功能
-- [ ] 部署到雲端服務
+## Endpoints Overview
 
-## 🤝 貢獻指南
+| Method | Endpoint           | Description                                 |
+|--------|--------------------|---------------------------------------------|
+| GET    | /                  | API info                                    |
+| GET    | /health            | Health check                                |
+| GET    | /docs              | Swagger UI                                  |
+| GET    | /redoc             | ReDoc documentation                         |
+| POST   | /api/query         | Single RAG query                            |
+| POST   | /api/batch-query   | Batch RAG queries                           |
+| GET    | /api/status        | System status and statistics                |
+| GET    | /api/config        | Get current configuration                   |
+| POST   | /api/reset-stats   | Reset API statistics                        |
 
-歡迎提交 Issue 和 Pull Request！
+## Example: Single Query
 
-### 開發規範
-- 使用 Poetry 管理依賴
-- 遵循 PEP 8 程式碼風格
-- 撰寫適當的註解和文檔
-- 新增測試案例
+**curl**
+```bash
+curl -X POST "http://127.0.0.1:8000/api/query" \
+     -H "Content-Type: application/json" \
+     -d '{"query": "Who is the current president of Taiwan?"}'
+```
 
-## 📄 授權
+**Python (requests)**
+```python
+import requests
+resp = requests.post(
+    "http://127.0.0.1:8000/api/query",
+    json={"query": "Who is the current president of Taiwan?"}
+)
+print(resp.json())
+```
+
+## Example: Batch Query
+
+**curl**
+```bash
+curl -X POST "http://127.0.0.1:8000/api/batch-query" \
+     -H "Content-Type: application/json" \
+     -d '{"queries": ["What is the capital of Taiwan?", "Who are the presidents of Taiwan?"]}'
+```
+
+**Python (requests)**
+```python
+import requests
+resp = requests.post(
+    "http://127.0.0.1:8000/api/batch-query",
+    json={"queries": ["What is the capital of Taiwan?", "Who are the presidents of Taiwan?"]}
+)
+print(resp.json())
+```
+
+## Example: Health Check
+
+```bash
+curl -X GET "http://127.0.0.1:8000/health"
+```
+
+## Example: System Status
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/status"
+```
+
+## Example: Get Configuration
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/config"
+```
+
+## Example: Reset Statistics
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/reset-stats"
+```
+
+---
+
+# ❓ FAQ & Error Handling
+
+### Q: What should I do if I get a 400 Bad Request?
+A: Check that your JSON body matches the required format. For example, for `/api/query`, you must provide `{ "query": "..." }`.
+
+### Q: What does a 500 Internal Server Error mean?
+A: This indicates a server-side error. Check the error message in the response (if available) and ensure your input is valid. If the problem persists, check the server logs or open an issue.
+
+### Q: How do I get/set my API key?
+A: Set your Cohere API key in the `.env` file as `COHERE_API_KEY=your_key_here`.
+
+### Q: What if I hit a rate limit or external API quota?
+A: You may need to wait and try again later, or check your Cohere account for quota status.
+
+### Q: How do I run tests?
+A: Use `poetry run pytest` or `python -m pytest` in the project root.
+
+### Q: How do I update the vector database with new Wikipedia data?
+A: Run the data fetch and embedding scripts in the `scripts/` directory.
+
+---
+
+# ⚠️ Error Codes
+
+| Code | Meaning                  | Typical Cause                        |
+|------|--------------------------|--------------------------------------|
+| 200  | Success                  | Request processed successfully        |
+| 400  | Bad Request              | Invalid input, missing fields         |
+| 404  | Not Found                | Endpoint does not exist               |
+| 500  | Internal Server Error    | Server-side error, see logs           |
+
+---
+
+# 🧪 Testing
+
+- **Run all tests:**
+  ```bash
+  python -m pytest -v
+  ```
+- **Run API integration tests:**
+  ```bash
+  python -m pytest -v tests/test_api_integration.py
+  ```
+- **Run coverage:**
+  ```bash
+  poetry run pytest --cov=app --cov=scripts --cov-report=xml --cov-report=html
+  ```
+
+---
+
+# 🐳 Docker & Deployment
+
+## Build and Run with Docker
+```bash
+docker build -t wiki-search-api .
+docker run -p 8000:8000 --env-file .env wiki-search-api
+```
+
+## Using Docker Compose
+```bash
+docker compose up --build
+```
+
+## Deploying to Cloud (e.g., AWS ECS/App Runner)
+- Build and push Docker image to ECR
+- Deploy using ECS Fargate or App Runner (see README for details)
+
+---
+
+# ⚙️ Configuration
+
+- All configuration is managed via `.env` (see `env.example`)
+- Required: `COHERE_API_KEY`
+- Other settings: vector DB path, chunk size, language, etc.
+
+---
+
+## Development Guidelines
+- Use Poetry for dependency management
+- Follow PEP 8 code style
+- Write clear comments and documentation
+- Add/maintain tests for all features
+
+---
+
+# 📈 Roadmap
+
+- [x] Wikipedia data fetch & cleaning
+- [x] Vectorization & FAISS storage
+- [x] Core RAG workflow (LangGraph)
+- [x] API endpoints (FastAPI)
+- [x] Logging & session tracking
+- [x] Guardrails validation
+- [x] Unit & integration tests
+- [x] Dockerization
+- [x] API documentation improvements
+- [ ] Monitoring & alerting
+- [ ] Performance optimization
+- [ ] User management & caching
+- [ ] Cloud deployment (AWS/GCP/Azure)
+
+---
+
+# 📄 License
 
 MIT License
 
-## 📞 聯絡資訊
+---
 
-如有問題或建議，請提交 Issue 或聯絡開發團隊。
+# 📬 Contact
 
-# 虛擬環境啟動與切換說明
-
-## 1. 進入 Poetry 全域虛擬環境
-
-Poetry 安裝時會自動建立一個全域虛擬環境，通常只建議用來執行 poetry 指令本身，不建議安裝專案套件。
-
-- **全域虛擬環境路徑**：
-  - `C:\Users\sssh3\AppData\Roaming\pypoetry\venv`
-- **啟動方式（不建議用於專案開發）**：
-  1. 開啟 cmd
-  2. 執行：
-     ```
+For questions or suggestions, please open an issue.
