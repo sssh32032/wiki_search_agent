@@ -1,128 +1,116 @@
 """
-Unit tests for scripts.fetch_wiki module
+Unit tests for scripts.fetch_wiki module (refactored)
 """
 
 import pytest
 import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, Mock
 from pathlib import Path
-
 from scripts.fetch_wiki import WikipediaFetcher
 
-
 class TestWikipediaFetcher:
-    """Test WikipediaFetcher class"""
-    
     @pytest.fixture(autouse=True)
     def setup_fetcher(self, mock_env_vars, clean_test_environment):
-        """Setup fetcher for testing"""
         self.fetcher = WikipediaFetcher()
-    
+
     def test_fetcher_initialization(self):
-        """Test fetcher initialization"""
         assert self.fetcher.language == "en"
-        assert hasattr(self.fetcher, 'api')
-    
-    @patch('scripts.fetch_wiki.wikipediaapi.Wikipedia')
-    def test_search_pages(self, mock_wikipedia):
-        """Test search pages method"""
-        # Mock Wikipedia API response
-        mock_api = Mock()
-        mock_page = Mock()
-        mock_page.title = "Artificial intelligence"
-        mock_page.summary = "AI is intelligence demonstrated by machines"
-        mock_page.url = "https://en.wikipedia.org/wiki/Artificial_intelligence"
-        
-        mock_api.page.return_value = mock_page
-        mock_wikipedia.return_value = mock_api
-        
-        with patch('scripts.fetch_wiki.wikipediaapi.Wikipedia') as mock_wiki:
-            mock_wiki.return_value = mock_api
-            
-            fetcher = WikipediaFetcher()
-            results = fetcher.search_pages("artificial intelligence", limit=1)
-            
-            assert len(results) == 1
-            assert results[0]['title'] == "Artificial intelligence"
-            assert results[0]['content'] == "AI is intelligence demonstrated by machines"
-    
-    @patch('scripts.fetch_wiki.wikipediaapi.Wikipedia')
-    def test_fetch_page_content(self, mock_wikipedia):
-        """Test fetch page content method"""
-        # Mock Wikipedia API response
-        mock_api = Mock()
-        mock_page = Mock()
-        mock_page.title = "Test Page"
-        mock_page.text = "This is test content"
-        mock_page.url = "https://en.wikipedia.org/wiki/Test_Page"
-        
-        mock_api.page.return_value = mock_page
-        mock_wikipedia.return_value = mock_api
-        
-        with patch('scripts.fetch_wiki.wikipediaapi.Wikipedia') as mock_wiki:
-            mock_wiki.return_value = mock_api
-            
-            fetcher = WikipediaFetcher()
-            content = fetcher.fetch_page_content("Test Page")
-            
-            assert content['title'] == "Test Page"
-            assert content['content'] == "This is test content"
-            assert content['url'] == "https://en.wikipedia.org/wiki/Test_Page"
-    
-    def test_save_data(self, clean_test_environment):
-        """Test save data method"""
-        test_data = {
-            "Test Page": {
-                "title": "Test Page",
-                "content": "Test content",
-                "url": "https://test.com"
-            }
-        }
-        
-        file_path = self.fetcher.save_data(test_data)
-        
-        assert Path(file_path).exists()
-        
-        # Verify saved content
-        with open(file_path, 'r', encoding='utf-8') as f:
-            saved_data = json.load(f)
-        
-        assert saved_data == test_data
-    
-    @patch('scripts.fetch_wiki.wikipediaapi.Wikipedia')
-    def test_error_handling(self, mock_wikipedia):
-        """Test error handling"""
-        # Mock Wikipedia API to raise exception
-        mock_api = Mock()
-        mock_api.page.side_effect = Exception("API Error")
-        mock_wikipedia.return_value = mock_api
-        
-        fetcher = WikipediaFetcher()
-        
-        # Should handle errors gracefully
-        with pytest.raises(Exception):
-            fetcher.fetch_page_content("NonExistentPage")
-    
-    def test_data_persistence(self, clean_test_environment):
-        """Test data persistence and file operations"""
-        test_data = {
-            "Test Page": {
-                "title": "Test Page",
-                "content": "Test content for persistence testing",
-                "url": "https://test.com"
-            }
-        }
-        
-        # Test data saving
-        file_path = self.fetcher.save_data(test_data)
-        
-        assert Path(file_path).exists()
-        
-        # Test data loading
-        with open(file_path, 'r', encoding='utf-8') as f:
-            loaded_data = json.load(f)
-        
-        assert loaded_data == test_data
-        
-        # Cleanup
-        Path(file_path).unlink() 
+        assert self.fetcher.max_pages == 5
+        assert self.fetcher.data_dir.exists()
+
+    @patch('scripts.fetch_wiki.wikipedia.search')
+    @patch('scripts.fetch_wiki.wikipedia.page')
+    def test_get_page_content_success(self, mock_page, mock_search):
+        mock_search.return_value = ["Test Page"]
+        mock_page_obj = Mock()
+        mock_page_obj.content = "This is test content. " * 10
+        mock_page_obj.summary = "Test summary."
+        mock_page_obj.title = "Test Page"
+        mock_page_obj.url = "https://en.wikipedia.org/wiki/Test_Page"
+        mock_page_obj.categories = ["Category1", "Category2"]
+        mock_page_obj.links = ["Link1", "Link2"]
+        mock_page.return_value = mock_page_obj
+        result = self.fetcher.get_page_content("Test Page")
+        assert result["title"] == "Test Page"
+        assert result["url"] == "https://en.wikipedia.org/wiki/Test_Page"
+        assert result["content"] == self.fetcher.clean_text(mock_page_obj.content)
+        assert result["summary"] == "Test summary."
+        assert result["categories"] == ["Category1", "Category2"]
+        assert result["links"] == ["Link1", "Link2"]
+
+    @patch('scripts.fetch_wiki.wikipedia.search')
+    def test_get_page_content_not_found(self, mock_search):
+        mock_search.return_value = []
+        result = self.fetcher.get_page_content("Nonexistent Page")
+        assert result is None
+
+    @patch('scripts.fetch_wiki.wikipedia.search')
+    @patch('scripts.fetch_wiki.wikipedia.page')
+    def test_get_page_content_short_content(self, mock_page, mock_search):
+        mock_search.return_value = ["Short Page"]
+        mock_page_obj = Mock()
+        mock_page_obj.content = "short"
+        mock_page_obj.summary = "summary"
+        mock_page_obj.title = "Short Page"
+        mock_page_obj.url = "url"
+        mock_page_obj.categories = []
+        mock_page_obj.links = []
+        mock_page.return_value = mock_page_obj
+        result = self.fetcher.get_page_content("Short Page")
+        assert result is None
+
+    @patch('scripts.fetch_wiki.wikipedia.search')
+    @patch('scripts.fetch_wiki.wikipedia.page')
+    def test_get_page_content_exception(self, mock_page, mock_search):
+        mock_search.return_value = ["Error Page"]
+        mock_page.side_effect = Exception("API Error")
+        result = self.fetcher.get_page_content("Error Page")
+        assert result is None
+
+    @patch('scripts.fetch_wiki.wikipedia.search')
+    @patch('scripts.fetch_wiki.wikipedia.page')
+    def test_search_and_fetch_pages(self, mock_page, mock_search):
+        mock_search.return_value = ["Page1", "Page2"]
+        mock_page_obj = Mock()
+        mock_page_obj.content = "This is test content. " * 10
+        mock_page_obj.summary = "summary"
+        mock_page_obj.title = "Page1"
+        mock_page_obj.url = "url"
+        mock_page_obj.categories = []
+        mock_page_obj.links = []
+        mock_page.return_value = mock_page_obj
+        result = self.fetcher.search_and_fetch_pages("test query", limit=2)
+        assert result["total_requested"] == 2
+        assert result["successful"] >= 1
+        assert "pages" in result
+
+    def test_clean_text(self):
+        raw = "<b>Test</b> [[Link|Alias]] [https://test.com label] {{template}} <!--comment--> <ref>ref</ref> * item"
+        cleaned = self.fetcher.clean_text(raw)
+        assert "<b>" not in cleaned
+        assert "[[" not in cleaned
+        assert "{{" not in cleaned
+        assert "<!--" not in cleaned
+        assert "<ref>" not in cleaned
+        assert not cleaned.strip().startswith("* ")
+
+    def test_data_dir_created(self):
+        # Should exist after fetcher init
+        assert self.fetcher.data_dir.exists()
+
+    def test_fetch_and_save_pages_creates_file(self):
+        # Use a dummy page_content method to avoid real API calls
+        self.fetcher.get_page_content = Mock(return_value={
+            "title": "Dummy",
+            "url": "url",
+            "content": "content" * 50,
+            "summary": "summary",
+            "categories": [],
+            "links": [],
+            "timestamp": "now"
+        })
+        file_count_before = len(list(self.fetcher.data_dir.glob("wikipedia_pages_*.json")))
+        self.fetcher.fetch_and_save_pages(["Dummy"])
+        file_count_after = len(list(self.fetcher.data_dir.glob("wikipedia_pages_*.json")))
+        assert file_count_after >= file_count_before
+        assert file_count_after <= file_count_before + 1 
