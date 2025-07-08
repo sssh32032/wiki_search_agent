@@ -499,7 +499,7 @@ Question: {state['input']}
         session_id = state.get("session_id", "unknown")
         log_node_entry(session_id, "input_validation", state["input"])
         
-        guard = Guard().use(DetectJailbreak, threshold=0.7, on_fail="exception")
+        guard = Guard().use(DetectJailbreak, threshold=0.8, on_fail="exception")
         try:
             guard.validate(state["input"])
             state["input_validated"] = True
