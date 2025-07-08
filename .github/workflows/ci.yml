@@ -152,8 +152,16 @@ jobs:
         name: build-artifacts
         path: dist/
 
+    - name: Set AWS secret env
+      run: |
+        if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+          echo "HAS_AWS_SECRET=false" >> $GITHUB_ENV
+        else
+          echo "HAS_AWS_SECRET=true" >> $GITHUB_ENV
+        fi
+
     - name: Conditionally build & push Docker image to ECR
-      if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+      if: env.HAS_AWS_SECRET == 'true'
       run: |
         echo "[ECR] Building and pushing Docker image..."
         aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com
@@ -162,7 +170,7 @@ jobs:
         docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/my-wiki-api:latest
 
     - name: Skip ECR push (no AWS secrets set)
-      if: ${{ secrets.AWS_ACCESS_KEY_ID == '' }}
+      if: env.HAS_AWS_SECRET == 'false'
       run: |
         echo "[ECR] Skipped: AWS secrets not set. Only running test/build."
 
