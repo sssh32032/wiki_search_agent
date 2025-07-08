@@ -1,6 +1,7 @@
 # 📖 Project Overview
 
 Wikipedia Assistant is an intelligent Q&A system based on Retrieval-Augmented Generation (RAG). It integrates the Wikipedia API, vector databases, and large language models to provide accurate, real-time knowledge answers via a RESTful API.
+
 This project was built with pair programming using Cursor.
 
 ## ✨ Features
