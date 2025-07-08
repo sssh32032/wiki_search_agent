@@ -1,30 +1,7 @@
-# Wikipedia Assistant (RAG-based Knowledge API)
-
-## 🚀 Quick Environment Setup (Windows)
-
-**Important: Use `cmd` (Command Prompt), NOT PowerShell!**
-
-```cmd
-# 1. Open cmd and navigate to the project directory
-cd C:\Users\sssh3\Desktop\side_project\agent_exercise\wiki_search
-
-# 2. List available Poetry virtual environments
-"dir C:\Users\sssh3\AppData\Local\pypoetry\Cache\virtualenvs"
-
-# 3. Activate the latest virtual environment
-C:\Users\sssh3\AppData\Local\pypoetry\Cache\virtualenvs\rag-exercise-kCDYDLwJ-py3.12\Scripts\activate.bat
-
-# 4. Verify environment
-python -c "from app.config import settings; print('✅ Settings loaded')"
-```
-
-**Success indicator:** The prompt should show `(rag-exercise-py3.12)` at the start.
-
----
-
 # 📖 Project Overview
 
 Wikipedia Assistant is an intelligent Q&A system based on Retrieval-Augmented Generation (RAG). It integrates the Wikipedia API, vector databases, and large language models to provide accurate, real-time knowledge answers via a RESTful API.
+This project was built with pair programming using Cursor.
 
 ## ✨ Features
 - **Intelligent Q&A**: Accurate answers based on Wikipedia data
