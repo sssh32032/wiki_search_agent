@@ -142,7 +142,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
 
     steps:
     - uses: actions/checkout@v4
@@ -153,8 +152,21 @@ jobs:
         name: build-artifacts
         path: dist/
 
-    - name: Deploy to production
+    - name: Conditionally build & push Docker image to ECR
+      if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
       run: |
-        echo "Deploying to production..."
-        # Add your deployment commands here
-        # Example: docker build, kubernetes deploy, etc. 
+        echo "[ECR] Building and pushing Docker image..."
+        aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com
+        docker build -t my-wiki-api .
+        docker tag my-wiki-api:latest <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/my-wiki-api:latest
+        docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/my-wiki-api:latest
+
+    - name: Skip ECR push (no AWS secrets set)
+      if: ${{ secrets.AWS_ACCESS_KEY_ID == '' }}
+      run: |
+        echo "[ECR] Skipped: AWS secrets not set. Only running test/build."
+
+    - name: Deploy to production (placeholder)
+      run: |
+        echo "Deploying to production... (add your deployment commands here)"
+        # Example: ECS/App Runner deploy, etc. 
