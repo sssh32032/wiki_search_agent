@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.lock
+htmlcov/
+data/
+faiss_index/
+logs/
+.env
+.env.*
+*.md
+tests/
+scripts/ 
