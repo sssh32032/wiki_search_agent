@@ -8,6 +8,7 @@ os.environ["OTEL_SDK_DISABLED"] = "true"
 
 import json
 import logging
+import uuid
 from typing import TypedDict, List, Dict, Any
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
@@ -61,10 +62,12 @@ class GraphState(TypedDict):
     - history: list of node names traversed
     - initial_node_choice: str, one of 'check_memory', 'retrieve', 'search_and_retrieve' (set by LLM1_decision)
     - search_and_retrieve_count: int, how many times search_and_retrieve has been called
+    - searched_queries: list[str], list of queries that have been searched
     - input_validated: bool, whether the input has passed validation
     - output_validated: bool, whether the output has passed validation
     - llm3_retry: int, how many times the LLM3 answer has been retried
     - final_relevance_result: str, the result of the relevance check
+    - session_id: str, unique session identifier for logging
     """
     input: str
     retrieved: str
@@ -77,19 +80,39 @@ class GraphState(TypedDict):
     output_validated: bool
     llm3_retry: int
     final_relevance_result: str
+    session_id: str
 
-def log_state_summary(state: GraphState, node_name: str):
-    """Log a summary of state with only key information"""
-    summary = {
-        "input": state.get("input", ""),
-        "output": state.get("output", ""),
-        "search_and_retrieve_count": state.get("search_and_retrieve_count", 0),
-        "searched_queries": state.get("searched_queries", []),
-        "input_validated": state.get("input_validated", False),
-        "output_validated": state.get("output_validated", False),
-        "llm3_retry": state.get("llm3_retry", 0)
-    }
-    logger.info(f"[Node] {node_name} state summary: {summary}")
+def log_node_entry(session_id: str, node_name: str, input_text: str = None):
+    """Log when entering a node with session separation"""
+    if input_text:
+        logger.info(f"[{session_id}] 🚀 {node_name} | Input: {input_text[:100]}{'...' if len(input_text) > 100 else ''}")
+    else:
+        logger.info(f"[{session_id}] 🚀 {node_name}")
+
+def log_node_change(session_id: str, node_name: str, change_description: str, details: str = None):
+    """Log changes made by a node"""
+    if details:
+        logger.info(f"[{session_id}] ✅ {node_name} | {change_description} | {details}")
+    else:
+        logger.info(f"[{session_id}] ✅ {node_name} | {change_description}")
+
+def log_node_warning(session_id: str, node_name: str, warning_message: str):
+    """Log warnings from nodes"""
+    logger.warning(f"[{session_id}] ⚠️  {node_name} | {warning_message}")
+
+def log_node_error(session_id: str, node_name: str, error_message: str):
+    """Log errors from nodes"""
+    logger.error(f"[{session_id}] ❌ {node_name} | {error_message}")
+
+def log_session_start(session_id: str, query: str):
+    """Log the start of a new session"""
+    logger.info("")  # Empty line for session separation
+    logger.info(f"[{session_id}] 🎯 SESSION START | Query: {query}")
+
+def log_session_end(session_id: str, final_output: str):
+    """Log the end of a session"""
+    logger.info(f"[{session_id}] 🏁 SESSION END | Output: {final_output.replace('\n', ' ')}")
+    logger.info("")  # Empty line for session separation
 
 class WikipediaRAGChain:
     """Wikipedia RAG Chain using LangGraph"""
@@ -135,18 +158,18 @@ class WikipediaRAGChain:
         if (vector_db_path / "index.faiss").exists():
             try:
                 vector_db = FAISS.load_local(str(vector_db_path), self.embeddings, allow_dangerous_deserialization=True)
-                logger.info("Loaded existing vector database (wiki_db)")
+                logger.info("📚 Loaded existing vector database (wiki_db)")
             except Exception as e:
-                logger.warning(f"Failed to load existing vector database: {e}")
+                logger.warning(f"❌ Failed to load existing vector database: {e}")
                 # Create new database if loading fails
                 vector_db = FAISS.from_texts(["Initial placeholder text for database creation"], self.embeddings)
                 vector_db.save_local(str(vector_db_path))
-                logger.info("Created new vector database (wiki_db)")
+                logger.info("📚 Created new vector database (wiki_db)")
         else:
             # Create empty vector database with proper initialization
             vector_db = FAISS.from_texts(["Initial placeholder text for database creation"], self.embeddings)
             vector_db.save_local(str(vector_db_path))
-            logger.info("Created new vector database (wiki_db)")
+            logger.info("📚 Created new vector database (wiki_db)")
         
         return vector_db, vector_db_path
 
@@ -160,21 +183,21 @@ class WikipediaRAGChain:
         if (memory_db_path / "index.faiss").exists():
             try:
                 memory_db = FAISS.load_local(str(memory_db_path), memory_embeddings, allow_dangerous_deserialization=True)
-                logger.info("Loaded existing memory_db from disk")
+                logger.info("💾 Loaded existing memory_db from disk")
             except Exception as e:
-                logger.warning(f"Failed to load memory_db: {e}")
+                logger.warning(f"❌ Failed to load memory_db: {e}")
                 memory_db = FAISS.from_texts(["Initial memory placeholder"], memory_embeddings)
                 memory_db.save_local(str(memory_db_path))
-                logger.info("Created new memory_db on disk")
+                logger.info("💾 Created new memory_db on disk")
         else:
             memory_db = FAISS.from_texts(["Initial memory placeholder"], memory_embeddings)
             memory_db.save_local(str(memory_db_path))
-            logger.info("Created new memory_db on disk")
+            logger.info("💾 Created new memory_db on disk")
         
         return memory_db, memory_db_path
 
     def _setup_graph(self):
-        logger.info('Setting up RAG graph with Guardrails')
+        logger.info('🔧 Setting up RAG graph with Guardrails')
         graph = StateGraph(GraphState)
         graph.add_node("input_validation", self.input_validation_node)
         graph.add_node("llm1_decision", self.llm1_decision_node)
@@ -233,22 +256,32 @@ class WikipediaRAGChain:
     # Node: Check memory for existing answer
     def check_memory_node(self, state: GraphState) -> GraphState:
         """Node: Check memory for an existing answer to the user's question."""
-        log_state_summary(state, "check_memory")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "check_memory")
+        
         result = self.memory.load_memory_variables({"query": state["input"]})
         state["retrieved"] = result.get("history", "")
         state["history"].append("check_memory")
+        
+        if state["retrieved"]:
+            log_node_change(session_id, "check_memory", "Found cached answer", f"Retrieved {len(state['retrieved'])} chars")
+        else:
+            log_node_change(session_id, "check_memory", "No cached answer found")
+        
         return state
 
     # Node: Retrieve relevant information from the vector database
     def retrieve_node(self, state: GraphState) -> GraphState:
         """Node: Retrieve relevant information from the vector database with Cohere Rerank."""
-        log_state_summary(state, "retrieve")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "retrieve")
         
         # Get initial documents
         docs = self.retriever.invoke(state["input"])
         if not docs:
             state["retrieved"] = ""
             state["history"].append("retrieve")
+            log_node_change(session_id, "retrieve", "No documents found")
             return state
         
         # Extract passages for reranking
@@ -256,7 +289,7 @@ class WikipediaRAGChain:
         
         try:
             # Use Cohere Rerank to improve relevance
-            logger.info(f"[Node] retrieve: Applying Cohere Rerank to {len(passages)} documents")
+            log_node_change(session_id, "retrieve", f"Applying Cohere Rerank to {len(passages)} documents")
             rerank_results = self.cohere_client.rerank(
                 query=state["input"], 
                 documents=passages, 
@@ -267,25 +300,29 @@ class WikipediaRAGChain:
             reranked_docs = [docs[r.index] for r in rerank_results.results]
             reranked_passages = [doc.page_content for doc in reranked_docs]
             
-            logger.info(f"[Node] retrieve: Rerank completed, selected top {len(reranked_passages)} documents")
+            log_node_change(session_id, "retrieve", f"Rerank completed, selected top {len(reranked_passages)} documents")
             state["retrieved"] = "\n".join(reranked_passages)
             
         except Exception as e:
-            logger.warning(f"[Node] retrieve: Rerank failed, using original results: {e}")
+            log_node_warning(session_id, "retrieve", f"Rerank failed, using original results: {e}")
             # Fallback to original results
             passages = [doc.page_content for doc in docs[:settings.rerank_top_n]]
             state["retrieved"] = "\n".join(passages)
         
         state["history"].append("retrieve")
+        log_node_change(session_id, "retrieve", f"Retrieved {len(state['retrieved'])} chars")
         return state
 
     # Node: Search Wikipedia, update DB, then retrieve
     def search_and_retrieve_node(self, state: GraphState) -> GraphState:
         """Node: Search Wikipedia, update the database, then retrieve relevant information."""
-        log_state_summary(state, "search_and_retrieve")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "search_and_retrieve")
+        
         # Ensure searched_queries exists in state
         if "searched_queries" not in state:
             state["searched_queries"] = []
+        
         # Use LLM to generate a new topic for wiki search
         topic_prompt = f"""
 You are an assistant to provide Wikipedia search queries to retrieve sufficient information for the user's question.
@@ -297,17 +334,20 @@ Previously searched queries: {state['searched_queries']}
 """
         response = self.cohere_client.chat(message=topic_prompt)
         query = response.text.strip().strip('"')
-        logger.info(f"[Node] search_and_retrieve_node LLM suggested query: {query}")
+        log_node_change(session_id, "search_and_retrieve", f"LLM suggested query: {query}")
+        
         # Avoid duplicate search
         if query in state["searched_queries"]:
-            logger.info(f"[Node] search_and_retrieve_node: query '{query}' already searched, skipping.")
+            log_node_change(session_id, "search_and_retrieve", f"Query '{query}' already searched, skipping")
             state["retrieved"] = ""
             state["output"] = "No new query to search."
             state["history"].append("search_and_retrieve")
             state["search_and_retrieve_count"] += 1
             return state
+        
         # Add query to searched_queries
         state["searched_queries"].append(query)
+        
         # --- WikipediaFetcher fetch and update logic ---
         from scripts.fetch_wiki import WikipediaFetcher
         import os
@@ -319,28 +359,33 @@ Previously searched queries: {state['searched_queries']}
         for page in search_results.get('pages', []):
             chunks = self.text_splitter.split_text(page['content'])
             new_texts.extend(chunks)
+        
         if new_texts:
             self.vector_db.add_texts(new_texts)
             self.vector_db.save_local(str(self.vector_db_path))
-            logger.info(f"Added {len(new_texts)} new chunks to vector database")
+            log_node_change(session_id, "search_and_retrieve", f"Added {len(new_texts)} new chunks to vector database")
         
         # Auto-cleanup: Delete the specific file that was just created
         try:
             saved_file = search_results.get('saved_file')
             if saved_file and os.path.exists(saved_file):
                 os.remove(saved_file)
-                logger.info(f"Auto-cleanup: Deleted newly created file {saved_file}")
+                log_node_change(session_id, "search_and_retrieve", f"Auto-cleanup: Deleted newly created file {saved_file}")
             else:
-                logger.info("Auto-cleanup: No file to clean up (no saved_file in results)")
+                log_node_change(session_id, "search_and_retrieve", "Auto-cleanup: No file to clean up (no saved_file in results)")
         except Exception as e:
-            logger.warning(f"Auto-cleanup failed: {e}")
+            log_node_warning(session_id, "search_and_retrieve", f"Auto-cleanup failed: {e}")
+        
         # Retrieve again after update
         docs = self.retriever.invoke(state["input"])
         passages = [doc.page_content for doc in docs]
         if passages:
             state["retrieved"] = "\n".join(passages)
+            log_node_change(session_id, "search_and_retrieve", f"Retrieved {len(state['retrieved'])} chars after update")
         else:
             state["retrieved"] = ""
+            log_node_change(session_id, "search_and_retrieve", "No documents found after update")
+        
         state["output"] = ""
         state["search_and_retrieve_count"] += 1
         state["history"].append("search_and_retrieve")
@@ -349,7 +394,9 @@ Previously searched queries: {state['searched_queries']}
     # Node: LLM1 Decision
     def llm1_decision_node(self, state: GraphState) -> GraphState:
         """LLM1 node: uses Cohere LLM to translate and decide next action."""
-        log_state_summary(state, "llm1_decision")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "llm1_decision", state["input"])
+        
         prompt = f"""
 You are an assistant to handle user input for a Wikipedia RAG system.
 If the user input is not in English, translate it to English and use that as the new input.
@@ -369,9 +416,9 @@ User input: {state['input']}
             result = json.loads(response.text)
             state["input"] = result.get("translated_input", state["input"])
             state["initial_node_choice"] = result.get("initial_node_choice", "check_memory")
-            logger.info(f"[Node] llm1_decision: Parsed result - {result}")
+            log_node_change(session_id, "llm1_decision", f"Parsed result - {result}")
         except Exception as e:
-            logger.warning(f"[Node] llm1_decision: JSON parsing failed - {e}")
+            log_node_warning(session_id, "llm1_decision", f"JSON parsing failed - {e}")
             state["input"] = state["input"]
             state["initial_node_choice"] = "check_memory"
         
@@ -381,11 +428,15 @@ User input: {state['input']}
     # Node: LLM2 Relevance Check
     def llm2_relevance_check_node(self, state: GraphState) -> GraphState:
         """LLM2 node: checks if the retrieved content is sufficient to answer the question."""
-        log_state_summary(state, "llm2_relevance_check")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "llm2_relevance_check")
+        
         if not state["retrieved"].strip():
             state["output"] = "insufficient"
             state["history"].append("llm2_relevance_check")
+            log_node_change(session_id, "llm2_relevance_check", "No retrieved content, marked insufficient")
             return state
+        
         prompt = f"""
 You are an assistant that checks if the provided context sufficiently answers all aspects of the question without missing information.
 Respond with only one of the following: 'sufficient' or 'insufficient'.
@@ -404,9 +455,9 @@ Question: {state['input']}
             else:
                 # Default to insufficient if neither keyword is found
                 state["output"] = "insufficient"
-            logger.info(f"[Node] llm2_relevance_check: Response '{response_text}'")
+            log_node_change(session_id, "llm2_relevance_check", f"Response '{response_text}'")
         except Exception as e:
-            logger.warning(f"[Node] llm2_relevance_check: API call failed - {e}")
+            log_node_warning(session_id, "llm2_relevance_check", f"API call failed - {e}")
             state["output"] = "insufficient"
         
         state["history"].append("llm2_relevance_check")
@@ -415,16 +466,21 @@ Question: {state['input']}
     # Node: LLM3 Answer
     def llm3_answer_node(self, state: GraphState) -> GraphState:
         """Node: Generate the final answer using Cohere LLM. Only set final_relevance_result if it is empty."""
-        log_state_summary(state, "llm3_answer")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "llm3_answer")
+        
         if not state["retrieved"].strip():
             state["output"] = "No relevant information found."
             if not state.get("final_relevance_result"):
                 state["final_relevance_result"] = "insufficient"
             state["history"].append("llm3_answer")
+            log_node_change(session_id, "llm3_answer", "No retrieved content, returning default message")
             return state
+        
         # Only set final_relevance_result if it is empty
         if not state.get("final_relevance_result"):
             state["final_relevance_result"] = state["output"]
+        
         prompt = f"""
 You are an assistant. You must answer the question strictly based on the provided context.
 If the context does not contain the answer, reply with 'No relevant information found.'
@@ -433,54 +489,61 @@ Context: {state['retrieved']}
 Question: {state['input']}
 """
         response = self.cohere_client.chat(message=prompt)
-        logger.info(f"[Node] llm3_answer Cohere response: {response.text}")
         state["output"] = response.text.strip()
+        log_node_change(session_id, "llm3_answer", f"Generated answer: {state['output'][:100].replace('\n', ' ')}{'...' if len(state['output']) > 100 else ''}")
         state["history"].append("llm3_answer")
         return state
 
     def input_validation_node(self, state: GraphState) -> GraphState:
         """Node: Validate user input for jailbreak attempts using Guardrails."""
-        log_state_summary(state, "input_validation")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "input_validation", state["input"])
+        
         guard = Guard().use(DetectJailbreak, threshold=0.7, on_fail="exception")
         try:
             guard.validate(state["input"])
             state["input_validated"] = True
             state["history"].append("input_validation")
-            logger.info("[Node] input_validation: Input passed jailbreak detection")
+            log_node_change(session_id, "input_validation", "Input passed jailbreak detection")
         except Exception as e:
             state["input_validated"] = False
             state["output"] = "Your input was flagged as unsafe. Please rephrase your question."
             state["history"].append("input_validation_failed")
-            logger.warning(f"[Node] input_validation: Jailbreak detected - {e}")
-            logger.info(f"[Node] input_validation output: {state['output']}")
+            log_node_warning(session_id, "input_validation", f"Jailbreak detected - {e}")
+            log_node_change(session_id, "input_validation", f"Output: {state['output']}")
         return state
 
     def output_validation_node(self, state: GraphState) -> GraphState:
         """Node: Validate output content for toxic language using Guardrails. Save to memory if valid and relevant."""
-        log_state_summary(state, "output_validation")
+        session_id = state.get("session_id", "unknown")
+        log_node_entry(session_id, "output_validation")
+        
         guard = Guard().use(ToxicLanguage, threshold=0.5, validation_method="sentence", on_fail="exception")
         try:
             guard.validate(state["output"])
             state["output_validated"] = True
             state["history"].append("output_validation")
-            logger.info("[Node] output_validation: Output passed toxic language detection")
+            log_node_change(session_id, "output_validation", "Output passed toxic language detection")
+            
             # Save to memory only if relevance is sufficient
             if state.get("final_relevance_result", "") == "sufficient":
                 self.memory.save_context({"query": state["input"]}, {"answer": state["output"]})
                 self.memory_db.save_local(str(self.memory_db_path))
-                logger.info(f"[Node] output_validation: Saved completed Q&A to memory_db")
+                log_node_change(session_id, "output_validation", "Saved completed Q&A to memory_db")
             else:
-                logger.info(f"[Node] output_validation: Skipped saving to memory_db (content was insufficient)")
+                log_node_change(session_id, "output_validation", "Skipped saving to memory_db (content was insufficient)")
         except Exception as e:
             state["output_validated"] = False
             state["llm3_retry"] = state.get("llm3_retry", 0) + 1
             state["output"] = f"Output validation failed: {e}"
             state["history"].append("output_validation_failed")
-            logger.warning(f"[Node] output_validation: Toxic language detected - {e}")
+            log_node_warning(session_id, "output_validation", f"Toxic language detected - {e}")
         return state
 
     def generate(self, query: str) -> str:
-        logger.info(f"[RAG] generate called with query: {query}")
+        session_id = str(uuid.uuid4())[:8]  # Generate short session ID
+        log_session_start(session_id, query)
+        
         state = GraphState({
             "input": query,
             "retrieved": "",
@@ -492,10 +555,15 @@ Question: {state['input']}
             "input_validated": False,
             "output_validated": False,
             "llm3_retry": 0,
-            "final_relevance_result": ""
+            "final_relevance_result": "",
+            "session_id": session_id  # Add session ID to state
         })
+        
         result = self.app.invoke(state)
-        return result["output"]
+        final_output = result["output"]
+        
+        log_session_end(session_id, final_output)
+        return final_output
 
 # For backward compatibility
 class LLMChainGraph:
