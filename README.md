@@ -72,13 +72,9 @@ wiki_search/
    cp env.example .env
    # Edit .env and add your API keys
    ```
-4. **Activate the Poetry virtual environment (Windows)**
-   - Open `cmd` (not PowerShell)
-   - Navigate to the project directory
-   - Activate the environment as shown above
 
 ## Running the API Server
-**Recommended (background):**
+**Background:**
 ```cmd
 start uvicorn app.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
