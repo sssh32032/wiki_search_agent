@@ -304,28 +304,3 @@ class TestSettingsIntegration:
             for key in ["COHERE_API_KEY", "CHUNK_SIZE", "TOP_K", "WIKI_LANGUAGE"]:
                 if key in os.environ and key not in original_env:
                     del os.environ[key]
-    
-    def test_settings_validation_integration(self):
-        """Test settings validation integration"""
-        # Save original environment
-        original_cohere_key = os.environ.get("COHERE_API_KEY", "")
-        
-        try:
-            # Test with valid API key
-            os.environ["COHERE_API_KEY"] = "valid_test_key"
-            # Note: validate_api_keys() checks the global settings instance
-            # which may not be updated by environment variable changes
-            # This test documents the current behavior
-            result = validate_api_keys()
-            # The result depends on the current global settings state
-            
-            # Test with invalid API key
-            os.environ["COHERE_API_KEY"] = ""
-            # The global settings instance may not reflect this change immediately
-            
-        finally:
-            # Restore original environment
-            if original_cohere_key:
-                os.environ["COHERE_API_KEY"] = original_cohere_key
-            else:
-                del os.environ["COHERE_API_KEY"] 

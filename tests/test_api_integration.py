@@ -7,6 +7,19 @@ class APIClient:
         self.base_url = base_url
         self.session = requests.Session()
 
+    def close(self):
+        """Close the session to release resources"""
+        if hasattr(self, 'session') and self.session:
+            self.session.close()
+
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - automatically close session"""
+        self.close()
+
     def test_health_check(self, timeout: int = 10) -> bool:
         try:
             response = self.session.get(f"{self.base_url}/health", timeout=timeout)
@@ -108,7 +121,10 @@ class APIClient:
 
 @pytest.fixture
 def api_client():
-    return APIClient("http://localhost:8000")
+    """Fixture that provides APIClient and ensures session is closed after test"""
+    client = APIClient("http://localhost:8000")
+    yield client
+    client.close()  # Ensure session is closed after test
 
 class TestAPIIntegration:
     """Integration tests for API endpoints (requires running server)"""
