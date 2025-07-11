@@ -57,15 +57,9 @@ def main():
     # 2. Run linting
     success &= run_command("poetry run python -m flake8 app scripts --count --exit-zero --max-complexity=10 --max-line-length=127", "Running linting")
     
-    # 3. Run unit tests
-    success &= run_command("poetry run pytest tests/ -v --cov=app --cov=scripts --cov-report=term-missing", "Running unit tests")
-    
-    # 4. Run integration tests
-    success &= run_command("poetry run pytest tests/test_integration.py -v -m integration", "Running integration tests")
-    
-    # 5. Generate coverage report
-    success &= run_command("poetry run pytest tests/ --cov=app --cov=scripts --cov-report=html", "Generating coverage report")
-    
+    # 3. Run all tests with coverage and generate a single report
+    success &= run_command("poetry run pytest tests/ -v --cov=app --cov=scripts --cov-report=term-missing --cov-report=html", "Running all tests with coverage")
+
     # Summary
     print(f"\n{'='*50}")
     if success:

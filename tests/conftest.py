@@ -45,51 +45,10 @@ def setup_test_logging():
     
     # Cleanup: remove temporary log file
     try:
-        if os.path.exists(temp_log_path):
-            os.unlink(temp_log_path)
+        if os.path.exists(setup_test_logging.log_file):
+            os.unlink(setup_test_logging.log_file)
     except Exception:
         pass  # Ignore cleanup errors
-
-
-@pytest.fixture(scope="session")
-def temp_test_dir():
-    """Create a temporary directory for test data"""
-    temp_dir = tempfile.mkdtemp()
-    yield temp_dir
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-@pytest.fixture(scope="session")
-def mock_wiki_data():
-    """Mock Wikipedia data for testing"""
-    return {
-        "Artificial intelligence": {
-            "title": "Artificial intelligence",
-            "content": "Artificial intelligence (AI) is the capability of computational systems to perform tasks that typically require human intelligence. These tasks include learning, reasoning, problem-solving, perception, and language understanding.",
-            "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
-            "extract": "Artificial intelligence (AI) is intelligence demonstrated by machines..."
-        }
-    }
-
-
-@pytest.fixture(scope="session")
-def mock_embeddings_data():
-    """Mock embeddings data for testing"""
-    return [
-        {
-            "text": "Artificial intelligence (AI) is the capability of computational systems to perform tasks that typically require human intelligence.",
-            "title": "Artificial intelligence",
-            "chunk_index": 0,
-            "url": "https://en.wikipedia.org/wiki/Artificial_intelligence"
-        },
-        {
-            "text": "These tasks include learning, reasoning, problem-solving, perception, and language understanding.",
-            "title": "Artificial intelligence", 
-            "chunk_index": 1,
-            "url": "https://en.wikipedia.org/wiki/Artificial_intelligence"
-        }
-    ]
-
 
 @pytest.fixture(scope="function")
 def mock_env_vars(monkeypatch):
@@ -129,7 +88,7 @@ def start_test_server():
         sys.executable, "-m", "uvicorn", "app.api.main:app", "--host", "127.0.0.1", "--port", "8000", "--log-level", "debug"
     ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     # Wait for the server to be ready
-    for _ in range(20):
+    for _ in range(60):
         try:
             res = requests.get("http://127.0.0.1:8000/health")
             if res.status_code == 200:
