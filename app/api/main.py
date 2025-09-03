@@ -1,8 +1,15 @@
+import sys
+import os
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 from datetime import datetime
+
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
 from app.api.routes import router
 from app.config import get_settings
 
