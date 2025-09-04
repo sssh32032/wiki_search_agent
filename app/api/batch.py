@@ -17,7 +17,10 @@ class BatchProcessor:
         """Process a single query asynchronously"""
         # Run the RAG pipeline
         start_time = datetime.now()
+
+        #not sure if this is thread-safe, leave it without await asyncio.to_thread
         answer = self.rag.generate(query)
+
         processing_time = (datetime.now() - start_time).total_seconds()
         
         result = {
